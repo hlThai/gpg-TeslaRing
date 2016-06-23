@@ -1,0 +1,14 @@
+paramList={}
+params_h=open("./params.h","r")
+for line in params_h:
+	line=line[:-1]
+	lineToList=line.split(" ")
+	if (("define" in lineToList[0]) and (len(lineToList)==3)):
+		if "." in lineToList[2]:
+			paramList[lineToList[1]]=float(lineToList[2])
+		elif lineToList[2][0] in "0123456789":
+			paramList[lineToList[1]]=int(lineToList[2])
+params_h.close()
+#print paramList
+
+
