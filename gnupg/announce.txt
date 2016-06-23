@@ -1,0 +1,185 @@
+To: gnupg-announce@gnupg.org, info-gnu@gnu.org
+Mail-Followup-To: gnupg-users@gnupg.org
+
+
+Hello!
+
+We are pleased to announce the availability of a new stable GnuPG-2
+release: Version 2.0.24.  This release includes a *security fix* to
+stop a possible DoS using garbled compressed data packets which can
+be used to put gpg into an infinite loop.
+
+The GNU Privacy Guard (GnuPG) is GNU's tool for secure communication
+and data storage.  It can be used to encrypt data, create digital
+signatures, help authenticating using Secure Shell and to provide a
+framework for public key cryptography.  It includes an advanced key
+management facility and is compliant with the OpenPGP and S/MIME
+standards.
+
+GnuPG-2 has a different architecture than GnuPG-1 (e.g. 1.4.17) in
+that it splits up functionality into several modules.  However, both
+versions may be installed alongside without any conflict.  In fact,
+the gpg version from GnuPG-1 is able to make use of the gpg-agent as
+included in GnuPG-2 and allows for seamless passphrase caching.  The
+advantage of GnuPG-1 is its smaller size and the lack of dependency on
+other modules at run and build time.  We will keep maintaining GnuPG-1
+versions because they are very useful for small systems and for server
+based applications requiring only OpenPGP support.
+
+GnuPG is distributed under the terms of the GNU General Public License
+(GPLv3+).  GnuPG-2 works best on GNU/Linux and *BSD systems but is
+also available for other Unices, Microsoft Windows and Mac OS X.
+
+
+What's New in 2.0.24
+====================
+
+ * gpg: Avoid DoS due to garbled compressed data packets.
+
+ * gpg: Screen keyserver responses to avoid importing unwanted keys
+   from rogue servers.
+
+ * gpg: The validity of user ids is now shown by default.  To revert
+   this add "list-options no-show-uid-validity" to gpg.conf.
+
+ * gpg: Print more specific reason codes with the INV_RECP status.
+
+ * gpg: Allow loading of a cert only key to an OpenPGP card.
+
+ * gpg-agent: Make ssh support for ECDSA keys work with Libgcrypt 1.6.
+
+ * Minor bug fixes.
+
+
+Getting the Software
+====================
+
+Please follow the instructions found at https://www.gnupg.org/download/
+or read on:
+
+GnuPG 2.0.24 may be downloaded from one of the GnuPG mirror sites or
+direct from ftp://ftp.gnupg.org/gcrypt/gnupg/ .  The list of mirrors
+can be found at https://www.gnupg.org/mirrors.html .  Note that GnuPG
+is not available at ftp.gnu.org.
+
+On ftp.gnupg.org and on its mirrors you should find the following new
+files in the gnupg/ directory:
+
+  - The GnuPG-2 source code compressed using BZIP2 and its OpenPGP
+    signature:
+
+    gnupg-2.0.24.tar.bz2     (4201k)
+    gnupg-2.0.24.tar.bz2.sig
+
+  - A patch file to upgrade a 2.0.23 GnuPG source tree.  This patch does
+    not include updates of the language files.
+
+    gnupg-2.0.23-2.0.24.diff.bz2 (20k)
+
+Note, that we don't distribute gzip compressed tarballs for GnuPG-2.
+A Windows version will eventually be released at https://gpg4win.org .
+
+
+Checking the Integrity
+======================
+
+In order to check that the version of GnuPG which you are going to
+install is an original and unmodified one, you can do it in one of
+the following ways:
+
+ * If you already have a trusted version of GnuPG installed, you
+   can simply check the supplied signature.  For example to check the
+   signature of the file gnupg-2.0.24.tar.bz2 you would use this command:
+
+     gpg --verify gnupg-2.0.24.tar.bz2.sig
+
+   This checks whether the signature file matches the source file.
+   You should see a message indicating that the signature is good and
+   made by that signing key.  Make sure that you have the right key,
+   either by checking the fingerprint of that key with other sources
+   or by checking that the key has been signed by a trustworthy other
+   key.  Note, that you can retrieve the signing key using the command
+
+     finger wk ,at' g10code.com
+
+   or using a keyserver like
+
+     gpg --keyserver keys.gnupg.net --recv-key 4F25E3B6
+
+   The distribution key 4F25E3B6 is signed by the well known key
+   1E42B367.
+
+   NEVER USE A GNUPG VERSION YOU JUST DOWNLOADED TO CHECK THE
+   INTEGRITY OF THE SOURCE - USE AN EXISTING GNUPG INSTALLATION!
+
+ * If you are not able to use an old version of GnuPG, you have to verify
+   the SHA-1 checksum.  Assuming you downloaded the file
+   gnupg-2.0.24.tar.bz2, you would run the sha1sum command like this:
+
+     sha1sum gnupg-2.0.24.tar.bz2
+
+   and check that the output matches the first line from the
+   following list:
+
+010e027d5f622778cadc4c124013fe515ed705cf  gnupg-2.0.24.tar.bz2
+594d7f91ba4fc215345f18afee46c4aa9f2b3303  gnupg-2.0.23-2.0.24.diff.bz2
+
+
+Documentation
+=============
+
+The file gnupg.info has the complete user manual of the system.
+Separate man pages are included as well; however they have not all the
+details available in the manual.  It is also possible to read the
+complete manual online in HTML format at
+
+  https://www.gnupg.org/documentation/manuals/gnupg/
+
+or in Portable Document Format at
+
+  https://www.gnupg.org/documentation/manuals/gnupg.pdf .
+
+The chapters on gpg-agent, gpg and gpgsm include information on how
+to set up the whole thing.  You may also want search the GnuPG mailing
+list archives or ask on the gnupg-users mailing lists for advise on
+how to solve problems.  Many of the new features are around for
+several years and thus enough public knowledge is already available.
+
+Almost all mail clients support GnuPG-2.  Mutt users may want to use
+the configure option "--enable-gpgme" during build time and put a "set
+use_crypt_gpgme" in ~/.muttrc to enable S/MIME support along with the
+reworked OpenPGP support.
+
+
+Support
+=======
+
+Please consult the archive of the gnupg-users mailing list before
+reporting a bug <https://gnupg.org/documentation/mailing-lists.html>.
+We suggest to send bug reports for a new release to this list in favor
+of filing a bug at <https://bugs.gnupg.org>.  We also have a dedicated
+service directory at:
+
+  https://www.gnupg.org/service.html
+
+The driving force behind the development of GnuPG is the company of
+its principal author, Werner Koch.  Maintenance and improvement of
+GnuPG and related software takes up most of their resources.  To allow
+him to continue this work he kindly asks to either purchase a support
+contract, engage g10 Code for custom enhancements, or to donate money:
+
+  https://gnupg.org/donate/
+
+
+Thanks
+======
+
+We have to thank all the people who helped with this release, be it
+testing, coding, translating, suggesting, auditing, administering the
+servers, spreading the word, and answering questions on the mailing
+lists.
+
+
+Happy Hacking,
+
+  The GnuPG Team

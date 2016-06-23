@@ -1,0 +1,18 @@
+# @configure_input@
+
+PERL = @PERL@
+PYTHON = @PYTHON@
+
+TB_PATH = "@TB_PATH@"
+TB_ARGS = @TB_ARGS@
+
+TESTS = @enable_tests@
+FIX_LANGUAGES = @enable_fix_lang@
+ENABLE_LANG = @enable_lang@
+
+srcdir = @srcdir@
+
+DIST = $(DEPTH)/build/dist
+BUILD = $(DEPTH)/build
+
+JSUNIT = $(DEPTH)/util/run-jsunit $(PERL) $(TB_PATH) $(TB_ARGS) -jsunit
