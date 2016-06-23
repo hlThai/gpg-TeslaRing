@@ -36,6 +36,7 @@
 
 /* Number of bits we accept when reading or writing MPIs. */
 #define MAX_EXTERN_MPI_BITS 16384
+#define MAX_EXTERN_EXTENDED_MPI_BITS 1073741824
 
 /* The maximum length of a binary fingerprints.  */
 #define MAX_FINGERPRINT_LEN 20

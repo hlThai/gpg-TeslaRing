@@ -27,7 +27,8 @@
 #include "gpg.h"
 #include "util.h"
 #include "pkglue.h"
-
+#include "cipher.h"
+#include "options.h"
 
 static gcry_mpi_t
 mpi_from_sexp (gcry_sexp_t sexp, const char * item)
@@ -74,23 +75,36 @@ pk_sign (int algo, gcry_mpi_t * data, gcry_mpi_t hash, gcry_mpi_t * skey)
 			    "(private-key(elg(p%m)(g%m)(y%m)(x%m)))",
 			    skey[0], skey[1], skey[2], skey[3]);
     }
+  else if (algo == PUBKEY_ALGO_LATTICE) {
+	  if( DBG_CIPHER )
+	  printf("pk glue: build private key for sign\n");
+	  rc = gcry_sexp_build (&s_skey, NULL,
+			  "(private-key(lattice(e%m)(d%m)))",
+			  skey[0], skey[1]);
+  }
   else
     return GPG_ERR_PUBKEY_ALGO;
 
   if (rc)
     BUG ();
 
+  if( DBG_CIPHER )
+  printf("private key sexp was build\n");
   /* put hash into a S-Exp s_hash */
   if (gcry_sexp_build (&s_hash, NULL, "%m", hash))
     BUG ();
 
+  if( DBG_CIPHER )
+  printf("hash sexp was build\n");
   rc = gcry_pk_sign (&s_sig, s_hash, s_skey);
   gcry_sexp_release (s_hash);
   gcry_sexp_release (s_skey);
 
+  if( DBG_CIPHER )
+  printf("start to get mpi from the sexp signature\n");
   if (rc)
     ;
-  else if (algo == GCRY_PK_RSA || algo == GCRY_PK_RSA_S)
+  else if (algo == GCRY_PK_RSA || algo == GCRY_PK_RSA_S || algo == PUBKEY_ALGO_LATTICE)
     data[0] = mpi_from_sexp (s_sig, "s");
   else
     {
@@ -99,6 +113,9 @@ pk_sign (int algo, gcry_mpi_t * data, gcry_mpi_t hash, gcry_mpi_t * skey)
     }
 
   gcry_sexp_release (s_sig);
+
+  if( DBG_CIPHER )
+  printf("finished with pk_sign\n");
   return rc;
 }
 
@@ -111,6 +128,9 @@ pk_verify (int algo, gcry_mpi_t hash, gcry_mpi_t * data, gcry_mpi_t * pkey)
 {
   gcry_sexp_t s_sig, s_hash, s_pkey;
   int rc;
+
+  if( DBG_CIPHER )
+  printf("pk verify called\n");
 
   /* make a sexp from pkey */
   if (algo == GCRY_PK_DSA)
@@ -130,6 +150,13 @@ pk_verify (int algo, gcry_mpi_t hash, gcry_mpi_t * data, gcry_mpi_t * pkey)
       rc = gcry_sexp_build (&s_pkey, NULL,
 			    "(public-key(rsa(n%m)(e%m)))", pkey[0], pkey[1]);
     }
+  else if (algo == PUBKEY_ALGO_LATTICE) {
+	  if( DBG_CIPHER )
+	  printf("pk glue: build public key for verify\n");
+	  rc = gcry_sexp_build (&s_pkey, NULL,
+			  "(public-key(lattice(e%m)))",
+			  pkey[0]);
+  }
   else
     return GPG_ERR_PUBKEY_ALGO;
 
@@ -165,6 +192,14 @@ pk_verify (int algo, gcry_mpi_t hash, gcry_mpi_t * data, gcry_mpi_t * pkey)
       else
         rc = gcry_sexp_build (&s_sig, NULL, "(sig-val(rsa(s%m)))", data[0]);
     }
+  else if (algo == PUBKEY_ALGO_LATTICE) {
+	  if( DBG_CIPHER )
+	  printf("building hash sexp for lattice\n");
+	  if (!data[0])
+	    rc = gpg_error (GPG_ERR_BAD_MPI);
+	  else
+		rc = gcry_sexp_build (&s_sig, NULL, "(sig-val(lattice(s%m)))", data[0]);
+  }
   else
     BUG ();
 
@@ -329,6 +364,11 @@ pk_check_secret_key (int algo, gcry_mpi_t *skey)
 			    skey[0], skey[1], skey[2], skey[3], skey[4],
 			    skey[5]);
     }
+  else if(algo == PUBKEY_ALGO_LATTICE){
+	  rc = gcry_sexp_build (&s_skey, NULL,
+			    "(private-key(lattice(e%m)(d%m)))",
+			    skey[0], skey[1]);
+  }
   else
     return GPG_ERR_PUBKEY_ALGO;
 

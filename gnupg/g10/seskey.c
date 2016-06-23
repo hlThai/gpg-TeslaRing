@@ -259,6 +259,12 @@ encode_md_value (PKT_public_key *pk, PKT_secret_key *sk,
                          gcry_md_read (md, hash_algo), qbytes, &qbytes))
         BUG();
     }
+  else if((pk?pk->pubkey_algo:sk->pubkey_algo) == PUBKEY_ALGO_LATTICE) {
+	  size_t len;
+      if (gcry_mpi_scan (&frame, GCRYMPI_FMT_USG,
+                         gcry_md_read (md, hash_algo), gcry_md_get_algo_dlen (hash_algo), &len))
+        BUG();
+  }
   else
     {
       gpg_error_t rc;

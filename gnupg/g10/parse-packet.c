@@ -38,10 +38,10 @@
 
 
 /* Maximum length of packets to avoid excessive memory allocation.  */
-#define MAX_KEY_PACKET_LENGTH     (256 * 1024)
+#define MAX_KEY_PACKET_LENGTH     (1048576 * 1024)
 #define MAX_UID_PACKET_LENGTH     (  2 * 1024)
 #define MAX_COMMENT_PACKET_LENGTH ( 64 * 1024)
-#define MAX_ATTR_PACKET_LENGTH    ( 16 * 1024*1024)
+#define MAX_ATTR_PACKET_LENGTH    ( 1024 * 1024*1024)
 
 
 static int mpi_print_mode;
@@ -183,6 +183,106 @@ mpi_read (iobuf_t inp, unsigned int *ret_nread, int secure)
 }
 
 
+/* Read an external representation of an extended mpi and return the MPI.  The
+ * external format is a 32 bit unsigned value stored in network byte
+ * order, giving the number of bits for the following integer. The
+ * integer is stored with MSB first (left padded with zeroes to align
+ * on a byte boundary).
+ */
+static gcry_mpi_t
+mpi_read_extended (iobuf_t inp, unsigned int *ret_nread, int secure)
+{
+  /*FIXME: Needs to be synced with gnupg14/mpi/mpicoder.c*/
+
+  int c, c1, c2, c3, c4, i;
+  unsigned int nmax = *ret_nread;
+  unsigned long nbits, nbytes;
+  size_t nread = 0;
+  gcry_mpi_t a = NULL;
+  byte *buf = NULL;
+  byte *p;
+
+  if (!nmax)
+    goto overflow;
+
+  // read the first byte
+  if ( (c = c1 = iobuf_get (inp)) == -1 )
+    goto leave;
+  if (++nread == nmax)
+    goto overflow;
+  nbits = c << 24;
+  // read the second byte
+  if ( (c = c2 = iobuf_get (inp)) == -1 )
+    goto leave;
+  if (++nread == nmax)
+    goto overflow;
+  nbits |= c << 16;
+  // read the third byte
+  if ( (c = c3 = iobuf_get (inp)) == -1 )
+    goto leave;
+  if (++nread == nmax)
+    goto overflow;
+  nbits |= c << 8;
+  // read the fourth byte
+  if ( (c = c4 = iobuf_get (inp)) == -1 )
+    goto leave;
+  ++nread;
+  nbits |= c;
+
+  // convert the bytes into an long again
+
+  if ( nbits > MAX_EXTERN_EXTENDED_MPI_BITS )
+    {
+      log_error("mpi too large (%ld bits)\n", nbits);
+      goto leave;
+    }
+
+  nbytes = (nbits+7) / 8;
+  if( DBG_PACKET )
+  printf("mpi read extended read %ld bytes \n", nbytes);
+  // allocating buffer
+  buf = secure ? gcry_xmalloc_secure (nbytes + 4) : gcry_xmalloc (nbytes + 4);
+  p = buf;
+  p[0] = c1;
+  p[1] = c2;
+  p[2] = c3;
+  p[3] = c4;
+  if( DBG_PACKET )
+  printf("mpi_red_extended: mpi length as header bytes [0]: %i [1]: %i, [2]: %i, [3]: %i\n"
+  		  , p[0], p[1], p[2], p[3]);
+  for ( i=0 ; i < nbytes; i++ ) // reading the mpi byte per byte into the buffer
+    {
+      p[i+4] = iobuf_get(inp) & 0xff;
+      if (nread == nmax)
+        goto overflow;
+      nread++;
+    }
+
+  if (nread >= 4 && !(buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3]))
+    {
+      /* Libgcrypt < 1.5.0 accidently rejects zero-length (i.e. zero)
+         MPIs.  We fix this here.  */
+	  if( DBG_PACKET )
+	  printf("read zero-length mpi\n");
+      a = gcry_mpi_new (0);
+    }
+  else
+    {
+      if ( gcry_mpi_scan( &a, GCRYMPI_FMT_USG, (buf+4), nbytes, &nread ) )
+        a = NULL;
+    }
+
+  *ret_nread = (nread+4); //add additional 4 bytes for the length header
+  gcry_free(buf);
+  return a;
+
+ overflow:
+  log_error ("mpi larger than indicated length (%ld bits)\n", 8*nmax);
+ leave:
+  *ret_nread = nread;
+  gcry_free(buf);
+  return a;
+}
 
 
 int
@@ -876,6 +976,9 @@ parse_pubkeyenc( IOBUF inp, int pkttype, unsigned long pktlen, PACKET *packet )
     int rc = 0;
     int i, ndata;
     PKT_pubkey_enc *k;
+
+    if( DBG_PACKET )
+    printf("parse_pubkeyenc called\n");
 
     k = packet->pkt.pubkey_enc = xmalloc_clear(sizeof *packet->pkt.pubkey_enc);
     if( pktlen < 12 ) {
@@ -1583,7 +1686,7 @@ parse_signature( IOBUF inp, int pkttype, unsigned long pktlen,
 	unknown_pubkey_warning( sig->pubkey_algo );
 	/* We store the plain material in data[0], so that we are able
 	 * to write it back with build_packet() */
-        if (pktlen > (5 * MAX_EXTERN_MPI_BITS/8))
+        if (pktlen > (5 * MAX_EXTERN_EXTENDED_MPI_BITS/8))
           {
             /* However we include a limit to avoid too trivial DoS
                attacks by having gpg allocate too much memory.  */
@@ -1600,7 +1703,11 @@ parse_signature( IOBUF inp, int pkttype, unsigned long pktlen,
     else {
 	for( i=0; i < ndata; i++ ) {
 	    n = pktlen;
-	    sig->data[i] = mpi_read(inp, &n, 0 );
+	    if (sig->pubkey_algo != PUBKEY_ALGO_LATTICE) {
+	    	sig->data[i] = mpi_read(inp, &n, 0 );
+	    } else {
+	    	sig->data[i] = mpi_read_extended(inp, &n, 0 );
+	    }
 	    pktlen -=n;
 	    if( list_mode ) {
 		fprintf (listfp, "\tdata: ");
@@ -1717,6 +1824,10 @@ parse_key (IOBUF inp, int pkttype, unsigned long pktlen,
     int rc=0;
     u32 keyid[2];
 
+    if( DBG_PACKET ) {
+    	printf("parse key function called\n");
+    	printf("key packet len: %ld\n", pktlen);
+    }
     (void)hdr;
 
     version = iobuf_get_noeof(inp); pktlen--;
@@ -1842,11 +1953,18 @@ parse_key (IOBUF inp, int pkttype, unsigned long pktlen,
 	}
 
 	for(i=0; i < npkey; i++ ) {
+
 	    n = pktlen;
+	    if( DBG_PACKET )
+	    printf("reading public key from secret key: pktlen: %ld, n: %ld\n", pktlen, n);
+	    if(algorithm != PUBKEY_ALGO_LATTICE) {
             sk->skey[i] = mpi_read(inp, &n, 0 );
+	    } else {
+	    	sk->skey[i] = mpi_read_extended(inp, &n, 0);
+	    }
             pktlen -=n;
 	    if( list_mode ) {
-		fprintf (listfp,   "\tskey[%d]: ", i);
+		fprintf (listfp,   "\tskey[%ld]: ", i);
 		mpi_print(listfp, sk->skey[i], mpi_print_mode  );
 		putc ('\n', listfp);
 	    }
@@ -2100,8 +2218,15 @@ parse_key (IOBUF inp, int pkttype, unsigned long pktlen,
 	}
 
 	for(i=0; i < npkey; i++ ) {
+
 	    n = pktlen;
+	    if( DBG_PACKET )
+	    printf("reading public key: pktlen: %ld, n: %ld\n", pktlen, n);
+	    if(algorithm != PUBKEY_ALGO_LATTICE) {
             pk->pkey[i] = mpi_read(inp, &n, 0 );
+	    } else {
+	    	pk->pkey[i] = mpi_read_extended(inp, &n, 0 );
+	    }
             pktlen -=n;
 	    if( list_mode ) {
 		fprintf (listfp,   "\tpkey[%d]: ", i);

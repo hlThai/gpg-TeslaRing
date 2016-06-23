@@ -982,6 +982,7 @@ write_selfsigs( KBNODE sec_root, KBNODE pub_root, PKT_secret_key *sk,
   pkt->pkttype = PKT_SIGNATURE;
   pkt->pkt.signature = copy_signature(NULL,sig);
   add_kbnode( pub_root, new_kbnode( pkt ) );
+
   return rc;
 }
 
@@ -1415,6 +1416,115 @@ gen_dsa (unsigned int nbits, KBNODE pub_root, KBNODE sec_root, DEK *dek,
   return 0;
 }
 
+/*
+ * Generate a Lattice key.
+ */
+static int
+gen_lattice (int algo, unsigned nbits, KBNODE pub_root, KBNODE sec_root, DEK *dek,
+         STRING2KEY *s2k, PKT_secret_key **ret_sk,
+         u32 timestamp, u32 expireval, int is_subkey)
+{
+	  int rc;
+	  PACKET *pkt;
+	  PKT_secret_key *sk;
+	  PKT_public_key *pk;
+	  gcry_sexp_t s_parms, s_key;
+	  const unsigned maxsize = (opt.flags.large_rsa ? 8192 : 4096);
+
+	  assert (is_LATTICE(algo));
+
+	  if (!nbits)
+	    nbits = DEFAULT_STD_KEYSIZE;
+
+	  if (nbits < 1024)
+	    {
+	      nbits = 2048;
+	      log_info (_("keysize invalid; using %u bits\n"), nbits );
+	    }
+	  else if (nbits > maxsize)
+	    {
+	      nbits = maxsize;
+	      log_info (_("keysize invalid; using %u bits\n"), nbits );
+	    }
+
+	  if ((nbits % 32))
+	    {
+	      nbits = ((nbits + 31) / 32) * 32;
+	      log_info (_("keysize rounded up to %u bits\n"), nbits );
+	    }
+
+	  rc = gcry_sexp_build (&s_parms, NULL,
+	                        "(genkey(lattice(nbits %d)))",
+	                        (int)nbits);
+	  if (rc)
+	    log_bug ("gcry_sexp_build failed: %s\n", gpg_strerror (rc));
+
+	  rc = gcry_pk_genkey (&s_key, s_parms);
+	  gcry_sexp_release (s_parms);
+	  if (rc)
+	    {
+	      log_error ("gcry_pk_genkey failed: %s\n", gpg_strerror (rc) );
+	      return rc;
+	    }
+
+
+	  sk = xmalloc_clear( sizeof *sk );
+	  pk = xmalloc_clear( sizeof *pk );
+	  sk->timestamp = pk->timestamp = timestamp;
+	  sk->version = pk->version = 4;
+	  if (expireval)
+	     {
+	       sk->expiredate = pk->expiredate = sk->timestamp + expireval;
+	     }
+	  sk->pubkey_algo = pk->pubkey_algo = algo;
+
+	  rc = key_from_sexp (pk->pkey, s_key, "public-key", "e");
+	  if (rc)
+	     {
+	       log_error ("key_from_sexp failed: %s\n", gpg_strerror (rc));
+	       gcry_sexp_release (s_key);
+	       free_public_key(pk);
+	       free_secret_key(sk);
+	       return rc;
+	     }
+
+	  rc = key_from_sexp (sk->skey, s_key, "private-key", "ed");
+	  if (rc)
+	    {
+	      log_error ("key_from_sexp failed: %s\n", gpg_strerror (rc) );
+	      gcry_sexp_release (s_key);
+	      free_public_key(pk);
+	      free_secret_key(sk);
+	      return rc;
+	    }
+	  gcry_sexp_release (s_key);
+
+	  sk->is_protected = 0;
+	  sk->protect.algo = 0;
+	  sk->csum  = checksum_mpi (sk->skey[1] );
+	  if( ret_sk ) /* return an unprotected version of the sk */
+	    *ret_sk = copy_secret_key( NULL, sk );
+
+	  rc = genhelp_protect (dek, s2k, sk);
+	  if (rc)
+	    {
+	      free_public_key (pk);
+	      free_secret_key (sk);
+	      return rc;
+	    }
+
+	  pkt = xmalloc_clear(sizeof *pkt);
+	  pkt->pkttype = is_subkey ? PKT_PUBLIC_SUBKEY : PKT_PUBLIC_KEY;
+	  pkt->pkt.public_key = pk;
+	  add_kbnode(pub_root, new_kbnode( pkt ));
+
+	  pkt = xmalloc_clear(sizeof *pkt);
+	  pkt->pkttype = is_subkey ? PKT_SECRET_SUBKEY : PKT_SECRET_KEY;
+	  pkt->pkt.secret_key = sk;
+	  add_kbnode(sec_root, new_kbnode( pkt ));
+
+	return 0;
+}
 
 /*
  * Generate an RSA key.
@@ -1725,6 +1835,7 @@ ask_algo (int addmode, int *r_subkey_algo, unsigned int *r_usage)
       tty_printf (_("   (%d) DSA (set your own capabilities)\n"), 7 );
       tty_printf (_("   (%d) RSA (set your own capabilities)\n"), 8 );
     }
+  tty_printf (_("   (%d) Lattice-Based-Cryptography (sign only)\n"), 10);
 
   for(;;)
     {
@@ -1781,8 +1892,12 @@ ask_algo (int addmode, int *r_subkey_algo, unsigned int *r_usage)
           algo = PUBKEY_ALGO_RSA;
           *r_usage = ask_key_flags (algo, addmode);
           break;
-	}
-      else
+	} else if ((algo == 10 || !strcmp (answer, "lattice/*")))
+		{
+		 algo = PUBKEY_ALGO_LATTICE;
+		 *r_usage = PUBKEY_USAGE_SIG;
+		 break;
+	} else
         tty_printf (_("Invalid selection.\n"));
 
     }
@@ -2358,6 +2473,9 @@ do_create (int algo, unsigned int nbits, KBNODE pub_root, KBNODE sec_root,
   else if( algo == PUBKEY_ALGO_RSA )
     rc = gen_rsa(algo, nbits, pub_root, sec_root, dek, s2k, sk,
                  timestamp, expiredate, is_subkey);
+  else if( algo == PUBKEY_ALGO_LATTICE)
+	rc = gen_lattice(algo, nbits, pub_root, sec_root, dek, s2k, sk,
+              timestamp, expiredate, is_subkey);
   else
     BUG();
 
@@ -3207,8 +3325,11 @@ generate_keypair (const char *fname, const char *card_serialno,
             }
           nbits = 0;
         }
-
+      if (algo == PUBKEY_ALGO_LATTICE) {
+    	  nbits = 0;
+      } else {
       nbits = ask_keysize (both? subkey_algo : algo, nbits);
+      }
       r = xmalloc_clear( sizeof *r + 20 );
       r->key = both? pSUBKEYLENGTH : pKEYLENGTH;
       sprintf( r->u.value, "%u", nbits);
@@ -3478,6 +3599,8 @@ do_generate_keypair (struct para_data_s *para,
      linked list.  The first packet is a dummy packet which we flag as
      deleted.  The very first packet must always be a KEY packet.  */
 
+
+
   start_tree (&pub_root);
   start_tree (&sec_root);
 
@@ -3516,6 +3639,11 @@ do_generate_keypair (struct para_data_s *para,
           assert (pri_sk);
         }
     }
+
+  KBNODE node;
+  node = find_kbnode( sec_root, PKT_SECRET_KEY );
+    if( !node )
+      BUG();
 
   if(!rc && (revkey=get_parameter_revkey(para,pREVOKER)))
     {
@@ -3674,7 +3802,6 @@ do_generate_keypair (struct para_data_s *para,
                               & PUBKEY_USAGE_ENC)) );
 
           pk = find_kbnode (pub_root, PKT_PUBLIC_KEY)->pkt->pkt.public_key;
-
           keyid_from_pk(pk,pk->main_keyid);
           register_trusted_keyid(pk->main_keyid);
 

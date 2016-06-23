@@ -48,6 +48,7 @@ pubkey_letter( int algo )
       case PUBKEY_ALGO_DSA:	return 'D' ;
       case PUBKEY_ALGO_ECDSA:	return 'E' ;	/* ECC DSA (sign only)   */
       case PUBKEY_ALGO_ECDH:	return 'e' ;	/* ECC DH (encrypt only) */
+      case PUBKEY_ALGO_LATTICE: return 'L' ;    /* lattice (sign only)   */
       default: return '?';
     }
 }
@@ -79,10 +80,11 @@ hash_public_key( gcry_md_hd_t md, PKT_public_key *pk )
   else
     for(i=0; i < npkey; i++ )
       {
-	if (gcry_mpi_print (GCRYMPI_FMT_PGP, NULL, 0, &nbytes, pk->pkey[i]))
+    const enum gcry_mpi_format fmt = ((pk->pubkey_algo==PUBKEY_ALGO_LATTICE) ? GCRYMPI_FMT_USG : GCRYMPI_FMT_PGP);
+	if (gcry_mpi_print (fmt, NULL, 0, &nbytes, pk->pkey[i]))
           BUG ();
 	pp[i] = xmalloc (nbytes);
-	if (gcry_mpi_print (GCRYMPI_FMT_PGP, pp[i], nbytes,
+	if (gcry_mpi_print (fmt, pp[i], nbytes,
                             &nbytes, pk->pkey[i]))
           BUG ();
         nn[i] = nbytes;

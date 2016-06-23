@@ -431,6 +431,7 @@ map_pk_openpgp_to_gcry (int algo)
     case PUBKEY_ALGO_ECDSA:     return 301 /*GCRY_PK_ECDSA*/;
     case PUBKEY_ALGO_ECDH:      return 302 /*GCRY_PK_ECDH*/;
     case PUBKEY_ALGO_ELGAMAL_E: return GCRY_PK_ELG;
+    case PUBKEY_ALGO_LATTICE:	return GCRY_PK_LATTICE;
     default: return algo;
     }
 }
@@ -511,6 +512,9 @@ openpgp_pk_algo_usage ( int algo )
       case PUBKEY_ALGO_ECDSA:
           use = PUBKEY_USAGE_CERT | PUBKEY_USAGE_SIG | PUBKEY_USAGE_AUTH;
           break;
+      case PUBKEY_ALGO_LATTICE:
+    	  use = PUBKEY_USAGE_SIG;
+    	  break;
       default:
           break;
     }
@@ -1497,6 +1501,10 @@ pubkey_nbits( int algo, gcry_mpi_t *key )
 	rc = gcry_sexp_build ( &sexp, NULL,
 			      "(public-key(rsa(n%m)(e%m)))",
 				  key[0], key[1] );
+    } else if (algo == PUBKEY_ALGO_LATTICE) {
+    	rc = gcry_sexp_build ( &sexp, NULL,
+    				      "(public-key(lattice(e%m)))",
+    					  key[0] );
     }
     else
 	return 0;
@@ -1522,7 +1530,7 @@ mpi_print( FILE *fp, gcry_mpi_t a, int mode )
     if( !mode ) {
 	unsigned int n1;
 	n1 = gcry_mpi_get_nbits(a);
-	n += fprintf(fp, "[%u bits]", n1);
+	n += fprintf(fp, "[%ld bits]", n1);
     }
     else {
 	unsigned char *buffer;

@@ -290,7 +290,6 @@ do_sign( PKT_secret_key *sk, PKT_signature *sig,
         rc = pk_sign( sk->pubkey_algo, sig->data, frame, sk->skey );
         gcry_mpi_release (frame);
       }
-
     if (!rc
 #if GCRYPT_VERSION_NUMBER >= 0x010700 /* Libgcrypt >= 1.7 */
         && is_DSA (sk->pubkey_algo)
@@ -1431,6 +1430,8 @@ make_keysig_packet( PKT_signature **ret_sig, PKT_public_key *pk,
 	  digest_algo = DIGEST_ALGO_MD5;
 	else if(sk->pubkey_algo==PUBKEY_ALGO_DSA)
 	  digest_algo = match_dsa_hash (gcry_mpi_get_nbits (sk->skey[1])/8);
+	else if(sk->pubkey_algo==PUBKEY_ALGO_LATTICE)
+	  digest_algo = DIGEST_ALGO_SHA512;
 	else
 	  digest_algo = DEFAULT_DIGEST_ALGO;
       }
@@ -1440,6 +1441,7 @@ make_keysig_packet( PKT_signature **ret_sig, PKT_public_key *pk,
 
     /* Hash the public key certificate. */
     hash_public_key( md, pk );
+
 
     if( sigclass == 0x18 || sigclass == 0x19 || sigclass == 0x28 )
       {
@@ -1490,6 +1492,7 @@ make_keysig_packet( PKT_signature **ret_sig, PKT_public_key *pk,
 	free_seckey_enc( sig );
     else
 	*ret_sig = sig;
+
     return rc;
 }
 

@@ -84,6 +84,7 @@ disable_keyserver_path=no
 use_ccid_driver=yes
 use_standard_socket=no
 large_secmem=no
+huge_secmem=no
 
 GNUPG_BUILD_PROGRAM(gpg, yes)
 GNUPG_BUILD_PROGRAM(gpgsm, yes)
@@ -182,11 +183,23 @@ AC_ARG_ENABLE(large-secmem,
                              [allocate extra secure memory]),
               large_secmem=$enableval, large_secmem=no)
 AC_MSG_RESULT($large_secmem)
+
+AC_MSG_CHECKING([whether to allocate huge secure memory which is needed for lattice based crypto])
+AC_ARG_ENABLE(huge-secmem,
+              AC_HELP_STRING([--enable-huge-secmem],
+                             [allocate extra huge secure memory]),
+              huge_secmem=$enableval, huge_secmem=no)
+AC_MSG_RESULT($huge_secmem)
+if test "$huge_secmem" = yes ; then
+   SECMEM_BUFFER_SIZE=33554432
+else
 if test "$large_secmem" = yes ; then
    SECMEM_BUFFER_SIZE=65536
 else
    SECMEM_BUFFER_SIZE=32768
 fi
+fi
+
 AC_DEFINE_UNQUOTED(SECMEM_BUFFER_SIZE,$SECMEM_BUFFER_SIZE,
                    [Size of secure memory buffer])
 
@@ -1327,7 +1340,8 @@ if test "$GCC" = yes; then
     if test "$USE_MAINTAINER_MODE" = "yes"; then
         CFLAGS="$CFLAGS -Wall -Wcast-align -Wshadow -Wstrict-prototypes"
         CFLAGS="$CFLAGS -Wformat -Wno-format-y2k -Wformat-security"
-        if test x"$_gcc_silent_wno" = xyes ; then
+        CFLAGS="$CFLAGS -lm"
+	if test x"$_gcc_silent_wno" = xyes ; then
           _gcc_wopt=yes
         else
           AC_MSG_CHECKING([if gcc supports -Wno-missing-field-initializers])

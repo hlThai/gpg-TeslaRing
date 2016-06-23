@@ -59,6 +59,7 @@
 #define PUBKEY_ALGO_ECDH            18
 #define PUBKEY_ALGO_ECDSA           19
 #define PUBKEY_ALGO_ELGAMAL         20 /* Elgamal encr+sign */
+#define PUBKEY_ALGO_LATTICE         23 /* Lattice based in development */
 
 #define PUBKEY_USAGE_SIG     GCRY_PK_USAGE_SIGN  /* Good for signatures. */
 #define PUBKEY_USAGE_ENC     GCRY_PK_USAGE_ENCR  /* Good for encryption. */
@@ -91,6 +92,7 @@
 		       || (a)==PUBKEY_ALGO_RSA_S )
 #define is_ELGAMAL(a) ((a)==PUBKEY_ALGO_ELGAMAL_E)
 #define is_DSA(a)     ((a)==PUBKEY_ALGO_DSA)
+#define is_LATTICE(a) ((a)==PUBKEY_ALGO_LATTICE)
 
 /* The data encryption key object. */
 typedef struct

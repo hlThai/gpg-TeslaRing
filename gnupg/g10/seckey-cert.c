@@ -43,8 +43,8 @@ do_check( PKT_secret_key *sk, const char *tryagain_text, int mode,
     u16 csum=0;
     int i, res;
     size_t nbytes;
-
     if( sk->is_protected ) { /* remove the protection */
+
 	DEK *dek = NULL;
 	u32 keyid[4]; /* 4! because we need two of them */
 	gcry_cipher_hd_t cipher_hd=NULL;
@@ -81,6 +81,7 @@ do_check( PKT_secret_key *sk, const char *tryagain_text, int mode,
 	dek = passphrase_to_dek( keyid, sk->pubkey_algo, sk->protect.algo,
 				 &sk->protect.s2k, mode,
                                  tryagain_text, canceled );
+
         if (!dek && canceled && *canceled)
 	    return GPG_ERR_CANCELED;
 
@@ -118,8 +119,9 @@ do_check( PKT_secret_key *sk, const char *tryagain_text, int mode,
             if ( ndata > 1 && p )
                 csumc = p[ndata-2] << 8 | p[ndata-1];
 	    data = xmalloc_secure ( ndata );
-            if (p)
+            if (p) {
               gcry_cipher_decrypt ( cipher_hd, data, ndata, p, ndata );
+            }
             else
               memset (data, 0, ndata);
 	    gcry_mpi_release (sk->skey[i]); sk->skey[i] = NULL ;
@@ -173,15 +175,27 @@ do_check( PKT_secret_key *sk, const char *tryagain_text, int mode,
                because the length may have an arbitrary value */
             if( sk->csum == csum ) {
                 for( ; i < pubkey_get_nskey(sk->pubkey_algo); i++ ) {
-                    if ( gcry_mpi_scan( &sk->skey[i], GCRYMPI_FMT_PGP,
-                                        p, ndata, &nbytes))
-                      {
-                        /* Checksum was okay, but not correctly
-                           decrypted.  */
-                        sk->csum = 0;
-                        csum = 1;
-                        break;
-                      }
+                	if(sk->pubkey_algo == PUBKEY_ALGO_LATTICE) {
+                		if ( gcry_mpi_scan( &sk->skey[i], GCRYMPI_FMT_USG,
+              		                                        p+2, ndata-22, &nbytes)) // add respecitively subtract 22 manually since we use sha1 checksum and don't use the pgp format for lattice keys
+              		                      {
+              		                        /* Checksum was okay, but not correctly
+              		                           decrypted.  */
+              		                        sk->csum = 0;
+              		                        csum = 1;
+              		                        break;
+              		     }
+                	} else {
+                		  if ( gcry_mpi_scan( &sk->skey[i], GCRYMPI_FMT_PGP,
+                		                                        p, ndata, &nbytes))
+                		                      {
+                		                        /* Checksum was okay, but not correctly
+                		                           decrypted.  */
+                		                        sk->csum = 0;
+                		                        csum = 1;
+                		                        break;
+                		                      }
+                	}
                     ndata -= nbytes;
                     p += nbytes;
                 }
@@ -259,8 +273,9 @@ do_check( PKT_secret_key *sk, const char *tryagain_text, int mode,
 		i < pubkey_get_nskey(sk->pubkey_algo); i++ ) {
 	    csum += checksum_mpi( sk->skey[i] );
 	}
-	if( csum != sk->csum )
-	    return G10ERR_CHECKSUM;
+	if( csum != sk->csum ) {
+	    	return G10ERR_CHECKSUM;
+		}
     }
 
     return 0;
@@ -349,15 +364,14 @@ protect_secret_key( PKT_secret_key *sk, DEK *dek )
 
     if( !dek )
 	return 0;
-
     if( !sk->is_protected ) { /* okay, apply the protection */
 	gcry_cipher_hd_t cipher_hd=NULL;
-
 	if ( openpgp_cipher_test_algo ( sk->protect.algo ) ) {
             /* Unsupport protection algorithm. */
             rc = gpg_error (GPG_ERR_CIPHER_ALGO);
         }
 	else {
+
 	    print_cipher_algo_note( sk->protect.algo );
 
 	    if ( openpgp_cipher_open (&cipher_hd, sk->protect.algo,
@@ -375,6 +389,7 @@ protect_secret_key( PKT_secret_key *sk, DEK *dek )
 		BUG(); /* yes, we are very careful */
 	    gcry_create_nonce (sk->protect.iv, sk->protect.ivlen);
 	    gcry_cipher_setiv (cipher_hd, sk->protect.iv, sk->protect.ivlen);
+
 	    if( sk->version >= 4 ) {
                 byte *bufarr[PUBKEY_MAX_NSKEY];
 		size_t narr[PUBKEY_MAX_NSKEY];
@@ -432,7 +447,6 @@ protect_secret_key( PKT_secret_key *sk, DEK *dek )
                     sk->protect.sha1chk = 1;
                 }
                 assert( p == data+ndata );
-
 		gcry_cipher_encrypt (cipher_hd, data, ndata, NULL, 0);
 		for (i = pubkey_get_npkey(sk->pubkey_algo);
                      i < pubkey_get_nskey(sk->pubkey_algo); i++ )
@@ -475,7 +489,7 @@ protect_secret_key( PKT_secret_key *sk, DEK *dek )
 		sk->csum = csum;
 	    }
 	    sk->is_protected = 1;
-	    gcry_cipher_close (cipher_hd);
+		gcry_cipher_close (cipher_hd);
 	}
     }
     return rc;

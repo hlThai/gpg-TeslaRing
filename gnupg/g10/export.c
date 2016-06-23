@@ -720,6 +720,14 @@ build_sexp_seckey (iobuf_t out, PACKET *pkt, int *indent)
       iobuf_put (out,')'); iobuf_put (out,'\n');
       (*indent)--;
     }
+  else if (is_LATTICE (sk->pubkey_algo) && !sk->is_protected) {
+      write_sexp_line (out, indent, "(lattice\n");
+      (*indent)++;
+      write_sexp_keyparm (out, indent, "e", sk->skey[0]); iobuf_put (out,'\n');
+      write_sexp_keyparm (out, indent, "d", sk->skey[2]); iobuf_put (out,'\n');
+      iobuf_put (out,')'); iobuf_put (out,'\n');
+      (*indent)--;
+  }
   write_sexp_line (out, indent,  "(attrib\n"); (*indent)++;
   sprintf (tmpbuf, "(created \"%lu\"", (unsigned long)sk->timestamp);
   write_sexp_line (out, indent, tmpbuf);

@@ -156,14 +156,19 @@ build_packet( IOBUF out, PACKET *pkt )
 static int
 mpi_write (iobuf_t out, gcry_mpi_t a)
 {
-  char buffer[(MAX_EXTERN_MPI_BITS+7)/8+2]; /* 2 is for the mpi length. */
+  char *buffer; /* 2 is for the mpi length. */
   size_t nbytes;
   int rc;
 
-  nbytes = DIM(buffer);
+  buffer = xmalloc((MAX_EXTERN_MPI_BITS+7)/8+4);
+
+  nbytes = (MAX_EXTERN_MPI_BITS+7)/8+4;
   rc = gcry_mpi_print (GCRYMPI_FMT_PGP, buffer, nbytes, &nbytes, a );
-  if( !rc )
+  if( !rc ) {
+	  if( DBG_PACKET )
+		  printf("iobuf write nbytes: %ld\n", nbytes);
     rc = iobuf_write( out, buffer, nbytes );
+  }
   else if (gpg_err_code(rc) == GPG_ERR_TOO_SHORT )
     {
       log_info ("mpi too large (%u bits)\n", gcry_mpi_get_nbits (a));
@@ -174,6 +179,63 @@ mpi_write (iobuf_t out, gcry_mpi_t a)
   return rc;
 }
 
+/*
+ * Write the extended mpi A to OUT.
+ */
+static int
+mpi_write_extended (iobuf_t out, gcry_mpi_t a)
+{
+  char *buffer; /* 4 is for the mpi length. */
+  size_t nbytes;
+  int rc;
+
+  buffer = xmalloc((MAX_EXTERN_EXTENDED_MPI_BITS+7)/8+4);
+
+  nbytes = (MAX_EXTERN_EXTENDED_MPI_BITS+7)/8+4;
+
+  /* write first the length of the MPI in the buffer */
+
+  unsigned long lenMPIbytes;  // length of the mpi
+  unsigned long lenMPIbits;   // length of the mpi in bits
+  unsigned char byteArray[4]; // array where we store the length byte wise
+
+  // compute length of the MPI
+  rc = gcry_mpi_print (GCRYMPI_FMT_USG, NULL, 0, &lenMPIbytes, a );
+  lenMPIbits = lenMPIbytes*8;
+  if( DBG_PACKET )
+  printf("mpi_write_extended: mpi length: %ld bytes or %ld bits\n", lenMPIbytes, lenMPIbits);
+
+  // transform the length in to bytes so that we can write them into the buffer
+  byteArray[0] = (int)((lenMPIbits & 0xFF000000) >> 24 );
+  byteArray[1] = (int)((lenMPIbits & 0x00FF0000) >> 16 );
+  byteArray[2] = (int)((lenMPIbits & 0x0000FF00) >> 8 );
+  byteArray[3] = (int)((lenMPIbits & 0X000000FF));
+
+  // now write the bytes into the buffer using some pointer arithmetic
+  *(buffer) = byteArray[0];
+  *(buffer+1) = byteArray[1];
+  *(buffer+2) = byteArray[2];
+  *(buffer+3) = byteArray[3];
+
+  if( DBG_PACKET )
+  printf("mpi_write_extended: mpi length as header bytes [0]: %i [1]: %i, [2]: %i, [3]: %i\n"
+		  , byteArray[0], byteArray[1], byteArray[2], byteArray[3]);
+
+  rc = gcry_mpi_print (GCRYMPI_FMT_USG, (buffer+4), nbytes, &nbytes, a );
+  if( !rc ) {
+	if( DBG_PACKET )
+	printf("mpi_write_usg, iobuf write nbytes: %ld\n", nbytes+4);
+    rc = iobuf_write( out, buffer, nbytes+4 ); // add aditional 4 bytes for the header
+  }
+  else if (gpg_err_code(rc) == GPG_ERR_TOO_SHORT )
+    {
+      log_info ("mpi too large (%ld bits)\n", gcry_mpi_get_nbits (a));
+      /* The buffer was too small. We better tell the user about the MPI. */
+      rc = gpg_error (GPG_ERR_TOO_LARGE);
+    }
+
+  return rc;
+}
 
 
 /****************
@@ -230,16 +292,24 @@ static int
 do_user_id( IOBUF out, int ctb, PKT_user_id *uid )
 {
     int rc;
+    if( DBG_PACKET )
+    printf("do user id called\n");
 
     if( uid->attrib_data )
       {
+    	if( DBG_PACKET )
+    	printf("is attrib_data\n");
 	write_header(out, ctb, uid->attrib_len);
 	rc = iobuf_write( out, uid->attrib_data, uid->attrib_len );
       }
     else
       {
+    	if( DBG_PACKET )
+    	printf("no attrib_data\n");
         write_header2( out, ctb, uid->len, 2 );
-	rc = iobuf_write( out, uid->name, uid->len );
+	rc = iobuf_write( out, uid->name, uid->len);
+		if( DBG_PACKET )
+		printf("writing user_id header: ctb %i, len %i\n", ctb, uid->len);
       }
     return rc;
 }
@@ -269,12 +339,18 @@ do_public_key( IOBUF out, int ctb, PKT_public_key *pk )
   n = pubkey_get_npkey ( pk->pubkey_algo );
   if ( !n )
     write_fake_data( a, pk->pkey[0] );
-  for (i=0; i < n && !rc ; i++ )
-    rc = mpi_write(a, pk->pkey[i] );
-
+  if( pk->pubkey_algo != PUBKEY_ALGO_LATTICE)  {
+	  for (i=0; i < n && !rc ; i++ )
+		  rc = mpi_write(a, pk->pkey[i] );
+  } else {
+	  // case lattice
+	  rc = mpi_write_extended(a, pk->pkey[0]); // we only have one public key
+  }
   if (!rc)
     {
-      write_header2 (out, ctb, iobuf_get_temp_length(a), pk->hdrbytes);
+	  if( DBG_PACKET )
+	  printf("write_header2: ctb %i, len %ld, hdrlen %i\n", ctb, iobuf_get_temp_length(a), pk->hdrbytes);
+	  write_header2(out, ctb, iobuf_get_temp_length(a), pk->hdrbytes);
       rc = iobuf_write_temp ( out, a );
     }
 
@@ -326,9 +402,15 @@ do_secret_key( IOBUF out, int ctb, PKT_secret_key *sk )
   assert ( npkey < nskey );
 
   /* Writing the public parameters is easy. */
+  if( sk->pubkey_algo != PUBKEY_ALGO_LATTICE )  {
   for (i=0; i < npkey; i++ )
     if ((rc = mpi_write (a, sk->skey[i])))
       goto leave;
+  } else {
+	  // except that for lattice we use our own function
+	  rc = mpi_write_extended(a, sk->skey[0]); // the first element of our secret key is the public key
+	  if(rc) goto leave;
+  }
 
   /* Build the header for protected (encrypted) secret parameters.  */
   if ( sk->is_protected )
@@ -346,6 +428,8 @@ do_secret_key( IOBUF out, int ctb, PKT_secret_key *sk )
           /* OpenPGP protection according to rfc2440. */
           iobuf_put(a, sk->protect.sha1chk? 0xfe : 0xff );
           iobuf_put(a, sk->protect.algo );
+          if( DBG_PACKET )
+          printf("at do_secret_key: sk->protect.algo : %i\n", sk->protect.algo);
           if ( sk->protect.s2k.mode >= 1000 )
             {
               /* These modes are not possible in OpenPGP, we use them
@@ -360,6 +444,8 @@ do_secret_key( IOBUF out, int ctb, PKT_secret_key *sk )
 	    }
           else
             {
+        	  if( DBG_PACKET )
+        	  printf("at do_secret_key: sk->protect.s2k.mode : %i, sk->protect.s2k.hash_algo : %i \n", sk->protect.s2k.mode, sk->protect.s2k.hash_algo );
               iobuf_put(a, sk->protect.s2k.mode );
               iobuf_put(a, sk->protect.s2k.hash_algo );
 	    }
@@ -398,6 +484,8 @@ do_secret_key( IOBUF out, int ctb, PKT_secret_key *sk )
 
       assert (gcry_mpi_get_flag (sk->skey[npkey], GCRYMPI_FLAG_OPAQUE));
       p = gcry_mpi_get_opaque (sk->skey[npkey], &ndatabits );
+      if( DBG_PACKET )
+      printf("before writing secret key ndatabits %ld, ndatabytes %ld\n",ndatabits, (ndatabits+7)/8);
       if (p)
         iobuf_write (a, p, (ndatabits+7)/8 );
     }
@@ -1150,15 +1238,24 @@ do_signature( IOBUF out, int ctb, PKT_signature *sig )
   n = pubkey_get_nsig( sig->pubkey_algo );
   if ( !n )
     write_fake_data( a, sig->data[0] );
-  for (i=0; i < n && !rc ; i++ )
-    rc = mpi_write(a, sig->data[i] );
+  if (sig->pubkey_algo != PUBKEY_ALGO_LATTICE) {
+	  for (i=0; i < n && !rc ; i++ )
+		  rc = mpi_write(a, sig->data[i] );
+  } else {
+	  // use extended mpi write since lattice signatures could be large too
+	  rc = mpi_write_extended(a, sig->data[0] ); // lattice has only one signature element
+  }
 
   if (!rc)
     {
       if ( is_RSA(sig->pubkey_algo) && sig->version < 4 )
         write_sign_packet_header(out, ctb, iobuf_get_temp_length(a) );
-      else
-        write_header(out, ctb, iobuf_get_temp_length(a) );
+      else {
+    	  if( DBG_PACKET )
+    	  printf("write signature packet header ctb: %i, length: %ld\n", ctb, iobuf_get_temp_length(a));
+    	  write_header(out, ctb, iobuf_get_temp_length(a) );
+      }
+
       rc = iobuf_write_temp( out, a );
     }
 
