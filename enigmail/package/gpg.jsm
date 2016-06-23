@@ -261,6 +261,10 @@ const EnigmailGpg = {
         return "ELG";
       case 22:
         return "EDDSA";
+      case 23:
+        return "LATTICE";
+      case 24:
+        return "LATTICE-ENC";
       default:
         return EnigmailLocale.getString("unknownSigningAlg", [parseInt(id, 10)]);
     }

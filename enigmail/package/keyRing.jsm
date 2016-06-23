@@ -62,6 +62,7 @@ const UNKNOWN_SIGNATURE = "[User ID not found]";
 
 const KEYTYPE_DSA = 1;
 const KEYTYPE_RSA = 2;
+const KEYTYPE_LATTICE = 3;
 
 let keygenProcess = null;
 let gKeyListObj = null;
@@ -742,6 +743,9 @@ var EnigmailKeyRing = {
         inputData += "RSA\nKey-Usage: sign,auth\nKey-Length: " + keyLength;
         inputData += "\nSubkey-Type: RSA\nSubkey-Usage: encrypt\nSubkey-Length: ";
         break;
+      case KEYTYPE_LATTICE:
+        inputData += "23\nSubkey-Type: 24\nSubkey-Length: ";
+        break;
       default:
         return null;
     }
@@ -1022,7 +1026,6 @@ var EnigmailKeyRing = {
   rebuildKeyIndex: function() {
     gKeyIndex = [];
     gSubkeyIndex = [];
-
     for (let i in gKeyListObj.keyList) {
       let k = gKeyListObj.keyList[i];
       gKeyIndex[k.keyId] = k;
