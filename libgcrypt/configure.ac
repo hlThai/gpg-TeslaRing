@@ -75,7 +75,7 @@ VERSION=$PACKAGE_VERSION
 
 AC_CONFIG_AUX_DIR([build-aux])
 AC_CONFIG_SRCDIR([src/libgcrypt.vers])
-AM_INIT_AUTOMAKE([serial-tests dist-bzip2])
+AM_INIT_AUTOMAKE([serial-tests dist-bzip2 subdir-objects])
 AC_CONFIG_HEADER(config.h)
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_LIBOBJ_DIR([compat])
@@ -193,7 +193,7 @@ available_ciphers="$available_ciphers camellia idea salsa20 gost28147 chacha20"
 enabled_ciphers=""
 
 # Definitions for public-key ciphers.
-available_pubkey_ciphers="dsa elgamal rsa ecc"
+available_pubkey_ciphers="dsa elgamal rsa ecc lattice"
 enabled_pubkey_ciphers=""
 
 # Definitions for message digests.
@@ -1640,7 +1640,7 @@ AC_ARG_ENABLE(optimization,
 
 # CFLAGS mangling when using gcc.
 if test "$GCC" = yes; then
-    CFLAGS="$CFLAGS -Wall"
+    CFLAGS="$CFLAGS -Wall -msse2avx -march=corei7-avx -O3 -fomit-frame-pointer -Wextra -g -lm -fPIC"
     if test "$USE_MAINTAINER_MODE" = "yes"; then
         CFLAGS="$CFLAGS -Wcast-align -Wshadow -Wstrict-prototypes"
         CFLAGS="$CFLAGS -Wformat -Wno-format-y2k -Wformat-security"
@@ -2017,6 +2017,13 @@ if test "$found" = "1" ; then
                           ecc.lo ecc-curves.lo ecc-misc.lo \
                           ecc-ecdsa.lo ecc-eddsa.lo ecc-gost.lo"
    AC_DEFINE(USE_ECC, 1, [Defined if this module should be included])
+fi
+
+LIST_MEMBER(lattice, $enabled_pubkey_ciphers)
+if test "$found" = "1" ; then
+   GCRYPT_PUBKEY_CIPHERS="$GCRYPT_PUBKEY_CIPHERS \
+                          lattice.lo"
+   AC_DEFINE(USE_LATTICE, 1, [Defined if this module should be included])
 fi
 
 LIST_MEMBER(crc, $enabled_digests)

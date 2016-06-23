@@ -81,7 +81,7 @@
 
  */
 
-typedef unsigned short DATALEN;
+typedef unsigned long DATALEN;
 
 struct gcry_sexp
 {

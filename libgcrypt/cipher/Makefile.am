@@ -22,7 +22,7 @@
 # Need to include ../src in addition to top_srcdir because gcrypt.h is
 # a built header.
 AM_CPPFLAGS = -I../src -I$(top_srcdir)/src
-AM_CFLAGS = $(GPG_ERROR_CFLAGS)
+AM_CFLAGS = $(GPG_ERROR_CFLAGS) -lm
 
 AM_CCASFLAGS = $(NOEXECSTACK_FLAGS)
 
@@ -57,7 +57,10 @@ bufhelp.h  \
 primegen.c  \
 hash-common.c hash-common.h \
 dsa-common.c rsa-common.c \
+tesla-ring/mat_At.c tesla-ring/crypto_hash_sha256.c tesla-ring/randombytes.c tesla-ring/sign.c tesla-ring/keypair.c tesla-ring/cpucycles.c tesla-ring/consts.c tesla-ring/oracle.c tesla-ring/matrix.c tesla-ring/mul_mn_uniQ_n_uniB.s tesla-ring/mul_mn_uniQ_n_uniB3x.s tesla-ring/compress_v.s tesla-ring/mul_mk_gauss_m_sparse_subred.s tesla-ring/crypto_stream_chacha20.c tesla-ring/chacha.S tesla-ring/gauss/samplers/rejection_ber_independent/rej_ber_independent.c tesla-ring/gauss/rnd/random.c\
+tesla-ring/api.h tesla-ring/crypto_hash_sha256.h tesla-ring/crypto_sign.h tesla-ring/randombytes.h tesla-ring/cpucycles.h tesla-ring/params.h tesla-ring/gauss/samplers/rejection_ber_independent/rej_ber_independent_table.data tesla-ring/oracle.h tesla-ring/matrix.h \
 rmd.h
+
 
 EXTRA_libcipher_la_SOURCES = \
 arcfour.c arcfour-amd64.S \
@@ -74,6 +77,7 @@ ecc-ecdsa.c ecc-eddsa.c ecc-gost.c \
 idea.c \
 gost28147.c gost.h \
 gostr3411-94.c \
+lattice.c \
 md4.c \
 md5.c \
 poly1305-sse2-amd64.S poly1305-avx2-amd64.S poly1305-armv7-neon.S \
@@ -105,7 +109,6 @@ gost-sb.h: gost-s-box
 
 gost-s-box: gost-s-box.c
 	$(CC_FOR_BUILD) -o $@ $(srcdir)/gost-s-box.c
-
 
 if ENABLE_O_FLAG_MUNGING
 o_flag_munging = sed -e 's/-O\([2-9s][2-9s]*\)/-O1/' -e 's/-Ofast/-O1/g'

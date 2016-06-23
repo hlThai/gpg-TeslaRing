@@ -48,6 +48,9 @@ static gcry_pk_spec_t *pubkey_list[] =
 #if USE_ELGAMAL
     &_gcry_pubkey_spec_elg,
 #endif
+#if USE_LATTICE
+    &_gcry_pubkey_spec_lattice,
+#endif
     NULL
   };
 
